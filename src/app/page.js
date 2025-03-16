@@ -1,103 +1,252 @@
+'use client'; // Add this line to indicate it's a client component
+
+import { useState } from "react";
 import Image from "next/image";
+import { jsPDF } from "jspdf";
+
+// Dynamically import Chart.js and react-chartjs-2 (to avoid SSR issues)
+import dynamic from "next/dynamic";
+
+// Dynamically import the Chart component on the client-side
+const Chart = dynamic(() => import("react-chartjs-2").then((mod) => mod.Chart), {
+  ssr: false, // Ensure it's only rendered on the client side
+});
+
+import {
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+
+// Register Chart.js components
+import { Chart as ChartJS } from "chart.js";
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+// CPU Scheduling Algorithm Functions
+
+// FIFO: First In, First Out
+function fifo(processes) {
+  let time = 0;
+  const result = [];
+  processes.forEach((process, index) => {
+    time += process.burstTime;
+    result.push({ processId: index + 1, completionTime: time });
+  });
+  return result;
+}
+
+// SJF: Shortest Job First
+function sjf(processes) {
+  let time = 0;
+  const result = [];
+  processes.sort((a, b) => a.burstTime - b.burstTime);
+  processes.forEach((process, index) => {
+    time += process.burstTime;
+    result.push({ processId: index + 1, completionTime: time });
+  });
+  return result;
+}
+
+// Round Robin
+function rr(processes, timeQuantum) {
+  let time = 0;
+  const result = [];
+  let queue = [...processes]; // A queue of processes
+
+  while (queue.length > 0) {
+    let process = queue.shift(); // Get the next process
+    let execTime = Math.min(process.burstTime, timeQuantum); // Execute for a max of timeQuantum
+    time += execTime; // Update total time
+    process.burstTime -= execTime; // Reduce the burst time of the current process
+    if (process.burstTime > 0) {
+      queue.push(process); // If process is not finished, add it back to the queue
+    }
+    result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
+  }
+  return result;
+}
+
+// STCF: Shortest Time-to-Completion First
+function stcf(processes) {
+  let time = 0;
+  const result = [];
+  let remainingProcesses = [...processes];
+  
+  while (remainingProcesses.length > 0) {
+    remainingProcesses.sort((a, b) => a.burstTime - b.burstTime);  // Sort by remaining burst time
+    const process = remainingProcesses.shift();
+    time += process.burstTime;
+    result.push({ processId: process.id, completionTime: time });
+  }
+  return result;
+}
+
+// MLFQ: Multi-Level Feedback Queue (simplified version)
+function mlfq(processes) {
+  let time = 0;
+  const result = [];
+  const queue1 = []; // Higher priority
+  const queue2 = []; // Lower priority
+
+  // Initially put all processes in queue1
+  processes.forEach((process) => queue1.push(process));
+
+  // Process until all queues are empty
+  while (queue1.length > 0 || queue2.length > 0) {
+    if (queue1.length > 0) {
+      let process = queue1.shift(); // Process from queue1 (highest priority)
+      let execTime = Math.min(process.burstTime, 2); // Time quantum for level 1 is 2
+      time += execTime;
+      process.burstTime -= execTime; // Reduce burst time
+      if (process.burstTime > 0) queue2.push(process); // Move to queue2 if not finished
+      result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
+    } else if (queue2.length > 0) {
+      let process = queue2.shift(); // Process from queue2 (lower priority)
+      let execTime = Math.min(process.burstTime, 4); // Time quantum for level 2 is 4
+      time += execTime;
+      process.burstTime -= execTime; // Reduce burst time
+      if (process.burstTime > 0) queue2.push(process); // If not finished, stay in queue2
+      result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
+    }
+  }
+  return result;
+}
+
+// Generate Random Processes
+function generateRandomProcesses(numProcesses) {
+  const processes = [];
+  for (let i = 0; i < numProcesses; i++) {
+    processes.push({
+      id: i + 1,
+      burstTime: Math.floor(Math.random() * 10) + 1, // Random burst time between 1 and 10
+    });
+  }
+  return processes;
+}
+
+// BarChart Component for displaying results using Chart.js
+function BarChart({ data }) {
+  const chartData = {
+    labels: data.map((d, i) => `Process ${i + 1}`),
+    datasets: [
+      {
+        label: "Completion Time",
+        data: data.map((d) => d.completionTime),
+        backgroundColor: "rgba(75, 192, 192, 0.2)",
+        borderColor: "rgba(75, 192, 192, 1)",
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  return <Chart type="bar" data={chartData} />;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [numProcesses, setNumProcesses] = useState(5);
+  const [timeQuantum, setTimeQuantum] = useState(3);
+  const [results, setResults] = useState([]);
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState("FIFO");
 
+  const handleRunAlgorithm = () => {
+    const processes = generateRandomProcesses(numProcesses);
+
+    let result;
+    switch (selectedAlgorithm) {
+      case "FIFO":
+        result = fifo(processes);
+        break;
+      case "SJF":
+        result = sjf(processes);
+        break;
+      case "RR":
+        result = rr(processes, timeQuantum);
+        break;
+      case "STCF":
+        result = stcf(processes);
+        break;
+      case "MLFQ":
+        result = mlfq(processes);
+        break;
+      default:
+        result = [];
+    }
+    setResults(result);
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text("CPU Scheduling Algorithm Results", 10, 10);
+    results.forEach((result, index) => {
+      doc.text(`Process ${index + 1}: Completion Time - ${result.completionTime}`, 10, 20 + index * 10);
+    });
+    doc.save("scheduling_results.pdf");
+  };
+
+  return (
+    <div className="bg-gray-100 min-h-screen p-8 pb-20">
+      {/* Header */}
+      <header className="bg-blue-600 text-white w-full py-6 text-center font-bold text-3xl shadow-lg mb-8">
+        CPU Scheduling Simulator
+      </header>
+
+      <main className="flex flex-col gap-[32px] items-center">
+        {/* Inputs */}
         <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <label className="text-lg text-gray-700">Number of Processes:</label>
+          <input
+            type="number"
+            value={numProcesses}
+            onChange={(e) => setNumProcesses(parseInt(e.target.value))}
+            className="border rounded px-3 py-2 text-black shadow-md"
+          />
+
+          <label className="text-lg text-gray-700">Time Quantum (for RR):</label>
+          <input
+            type="number"
+            value={timeQuantum}
+            onChange={(e) => setTimeQuantum(parseInt(e.target.value))}
+            className="border rounded px-3 py-2 text-black shadow-md"
+          />
+
+          <label className="text-lg text-gray-700">Select Algorithm:</label>
+          <select
+            value={selectedAlgorithm}
+            onChange={(e) => setSelectedAlgorithm(e.target.value)}
+            className="border rounded px-3 py-2 text-black shadow-md"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <option value="FIFO">FIFO</option>
+            <option value="SJF">SJF</option>
+            <option value="RR">RR</option>
+            <option value="STCF">STCF</option>
+            <option value="MLFQ">MLFQ</option>
+          </select>
         </div>
+
+        {/* Run Button */}
+        <button
+          onClick={handleRunAlgorithm}
+          className="bg-blue-500 text-white rounded px-6 py-3 mt-4 hover:bg-blue-700 transition-all"
+        >
+          Run Algorithm
+        </button>
+
+        {/* Results */}
+        {results.length > 0 && (
+          <>
+            <BarChart data={results} />
+            <button
+              onClick={generatePDF}
+              className="bg-green-500 text-white rounded px-6 py-3 mt-4 hover:bg-green-700 transition-all"
+            >
+              Download PDF
+            </button>
+          </>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
