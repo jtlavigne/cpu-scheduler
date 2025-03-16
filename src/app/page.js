@@ -56,12 +56,12 @@ function sjf(processes) {
   return { result, timeline };
 }
 
-// Round Robin
 function rr(processes, timeQuantum) {
   let time = 0;
   const result = [];
   const timeline = [];
   let queue = [...processes];
+  let completionTimes = {}; // Store the last completion time for each process
 
   while (queue.length > 0) {
     let process = queue.shift();
@@ -69,14 +69,63 @@ function rr(processes, timeQuantum) {
     const execTime = Math.min(process.burstTime, timeQuantum);
     time += execTime;
     process.burstTime -= execTime;
+
     if (process.burstTime > 0) {
       queue.push(process);
     }
-    result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
+
     timeline.push({ processId: process.id, startTime, endTime: time });
+    completionTimes[process.id] = time; // Always update to track last completion
   }
+
+  // Convert to array format for graphing
+  Object.entries(completionTimes).forEach(([processId, completionTime]) => {
+    result.push({ processId: parseInt(processId), completionTime });
+  });
+
   return { result, timeline };
 }
+
+function mlfq(processes) {
+  let time = 0;
+  const result = [];
+  const timeline = [];
+  const queue1 = [];
+  const queue2 = [];
+  let completionTimes = {}; // Store last completion times
+
+  processes.forEach((process) => queue1.push(process));
+
+  while (queue1.length > 0 || queue2.length > 0) {
+    if (queue1.length > 0) {
+      let process = queue1.shift();
+      const startTime = time;
+      const execTime = Math.min(process.burstTime, 2);
+      time += execTime;
+      process.burstTime -= execTime;
+      if (process.burstTime > 0) queue2.push(process);
+      timeline.push({ processId: process.id, startTime, endTime: time });
+      completionTimes[process.id] = time;
+    } else if (queue2.length > 0) {
+      let process = queue2.shift();
+      const startTime = time;
+      const execTime = Math.min(process.burstTime, 4);
+      time += execTime;
+      process.burstTime -= execTime;
+      if (process.burstTime > 0) queue2.push(process);
+      timeline.push({ processId: process.id, startTime, endTime: time });
+      completionTimes[process.id] = time;
+    }
+  }
+
+  // Convert completion times to array format for graphing
+  Object.entries(completionTimes).forEach(([processId, completionTime]) => {
+    result.push({ processId: parseInt(processId), completionTime });
+  });
+
+  return { result, timeline };
+}
+
 
 // STCF: Shortest Time-to-Completion First
 function stcf(processes) {
@@ -92,40 +141,6 @@ function stcf(processes) {
     time += process.burstTime;
     result.push({ processId: process.id, completionTime: time });
     timeline.push({ processId: process.id, startTime, endTime: time });
-  }
-  return { result, timeline };
-}
-
-// MLFQ: Multi-Level Feedback Queue (simplified version)
-function mlfq(processes) {
-  let time = 0;
-  const result = [];
-  const timeline = [];
-  const queue1 = [];
-  const queue2 = [];
-
-  processes.forEach((process) => queue1.push(process));
-
-  while (queue1.length > 0 || queue2.length > 0) {
-    if (queue1.length > 0) {
-      let process = queue1.shift();
-      const startTime = time;
-      const execTime = Math.min(process.burstTime, 2);
-      time += execTime;
-      process.burstTime -= execTime;
-      if (process.burstTime > 0) queue2.push(process);
-      result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
-      timeline.push({ processId: process.id, startTime, endTime: time });
-    } else if (queue2.length > 0) {
-      let process = queue2.shift();
-      const startTime = time;
-      const execTime = Math.min(process.burstTime, 4);
-      time += execTime;
-      process.burstTime -= execTime;
-      if (process.burstTime > 0) queue2.push(process);
-      result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
-      timeline.push({ processId: process.id, startTime, endTime: time });
-    }
   }
   return { result, timeline };
 }
@@ -161,16 +176,31 @@ function BarChart({ data }) {
 }
 
 function TimelineChart({ data }) {
+  const processColors = {};
+  const seenProcesses = new Set(); // Track which processes have been labeled
+
+  const getColor = (id) => {
+    if (!processColors[id]) {
+      processColors[id] = `hsl(${(id * 137) % 360}, 70%, 50%)`; // Ensures unique but consistent colors
+    }
+    return processColors[id];
+  };
+
   const chartData = {
     labels: ["Processes"], // Single row for all processes
-    datasets: data.map((process, index) => ({
-      label: `Process ${process.processId}`,
-      data: [{ x: [process.startTime, process.endTime], y: 0 }], // Single row timeline
-      backgroundColor: `hsl(${(index * 360) / data.length}, 70%, 50%)`,
-      borderColor: "black",
-      borderWidth: 1,
-      barThickness: 20,
-    })),
+    datasets: data.map((process) => {
+      const label = seenProcesses.has(process.processId) ? "" : `Process ${process.processId}`;
+      seenProcesses.add(process.processId); // Mark this process as labeled
+
+      return {
+        label, // Only the first occurrence gets a label
+        data: [{ x: [process.startTime, process.endTime], y: 0 }], // Single-row timeline
+        backgroundColor: getColor(process.processId),
+        borderColor: "black",
+        borderWidth: 1,
+        barThickness: 20,
+      };
+    }),
   };
 
   const options = {
