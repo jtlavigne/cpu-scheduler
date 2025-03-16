@@ -57,12 +57,12 @@ function sjf(processes) {
   return { result, timeline };
 }
 
-function rr(originalProcesses, timeQuantum) {
+function rr(processes, timeQuantum) {
   let time = 0;
   const result = [];
   const timeline = [];
-  let queue = originalProcesses.map(p => ({ ...p })); // Deep copy to preserve burstTime
-  let completionTimes = {}; // Track last completion time for each process
+  let queue = [...processes];
+  let completionTimes = {}; // Store the last completion time for each process
 
   while (queue.length > 0) {
     let process = queue.shift();
@@ -72,13 +72,14 @@ function rr(originalProcesses, timeQuantum) {
     process.burstTime -= execTime;
 
     if (process.burstTime > 0) {
-      queue.push(process); // If not done, requeue
+      queue.push(process);
     }
 
     timeline.push({ processId: process.id, startTime, endTime: time });
-    completionTimes[process.id] = time; // Store last completion time
+    completionTimes[process.id] = time; // Always update to track last completion
   }
 
+  // Convert to array format for graphing
   Object.entries(completionTimes).forEach(([processId, completionTime]) => {
     result.push({ processId: parseInt(processId), completionTime });
   });
@@ -86,17 +87,14 @@ function rr(originalProcesses, timeQuantum) {
   return { result, timeline };
 }
 
-
-function mlfq(originalProcesses) {
+function mlfq(processes) {
   let time = 0;
   const result = [];
   const timeline = [];
   const queue1 = [];
   const queue2 = [];
-  let completionTimes = {}; // Track last completion times
+  let completionTimes = {}; // Store last completion times
 
-  // Deep copy of processes
-  let processes = originalProcesses.map(p => ({ ...p }));
   processes.forEach((process) => queue1.push(process));
 
   while (queue1.length > 0 || queue2.length > 0) {
@@ -121,12 +119,14 @@ function mlfq(originalProcesses) {
     }
   }
 
+  // Convert completion times to array format for graphing
   Object.entries(completionTimes).forEach(([processId, completionTime]) => {
     result.push({ processId: parseInt(processId), completionTime });
   });
 
   return { result, timeline };
 }
+
 
 // STCF: Shortest Time-to-Completion First
 function stcf(processes) {
@@ -161,37 +161,19 @@ function generateRandomProcesses(numProcesses) {
 // BarChart Component for displaying results using Chart.js
 function BarChart({ data }) {
   const chartData = {
-    labels: data.map((d, i) => `P${i + 1}`),
+    labels: data.map((d, i) => `Process ${i + 1}`),
     datasets: [
       {
         label: "Completion Time",
         data: data.map((d) => d.completionTime),
-        backgroundColor: "rgba(75, 192, 192, 0.6)",
+        backgroundColor: "rgba(75, 192, 192, 0.2)",
         borderColor: "rgba(75, 192, 192, 1)",
         borderWidth: 1,
       },
     ],
   };
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false, // Allows dynamic resizing
-    plugins: {
-      legend: {
-        display: true,
-      },
-    },
-    scales: {
-      x: { title: { display: true, text: "Processes" } },
-      y: { title: { display: true, text: "Completion Time" } },
-    },
-  };
-
-  return (
-    <div className="w-full h-96"> {/* Ensures enough space */}
-      <Bar data={chartData} options={options} />
-    </div>
-  );
+  return <Chart type="bar" data={chartData} />;
 }
 
 function TimelineChart({ data }) {
@@ -200,32 +182,31 @@ function TimelineChart({ data }) {
 
   const getColor = (id) => {
     if (!processColors[id]) {
-      processColors[id] = `hsl(${(id * 137) % 360}, 70%, 50%)`; // Unique consistent colors
+      processColors[id] = `hsl(${(id * 137) % 360}, 70%, 50%)`; // Ensures unique but consistent colors
     }
     return processColors[id];
   };
 
   const chartData = {
-    labels: data.map((process) => `P${process.processId}`), // Each process gets its own row
-    datasets: [
-      {
-        label: "Execution Timeline",
-        data: data.map((process, index) => ({
-          x: [process.startTime, process.endTime], // Time range
-          y: index, // Separate each process on Y-axis
-        })),
-        backgroundColor: data.map((process) => getColor(process.processId)),
+    labels: ["Processes"], // Single row for all processes
+    datasets: data.map((process) => {
+      const label = seenProcesses.has(process.processId) ? "" : `Process ${process.processId}`;
+      seenProcesses.add(process.processId); // Mark this process as labeled
+
+      return {
+        label, // Only the first occurrence gets a label
+        data: [{ x: [process.startTime, process.endTime], y: 0 }], // Single-row timeline
+        backgroundColor: getColor(process.processId),
         borderColor: "black",
         borderWidth: 1,
-        barThickness: 25, // Prevent bars from being too thin
-      },
-    ],
+        barThickness: 20,
+      };
+    }),
   };
 
   const options = {
     responsive: true,
-    maintainAspectRatio: false,
-    indexAxis: "y", // Horizontal bars
+    indexAxis: "y", // Horizontal bar chart
     scales: {
       x: {
         type: "linear",
@@ -236,39 +217,28 @@ function TimelineChart({ data }) {
         },
       },
       y: {
-        title: {
-          display: true,
-          text: "Processes",
-        },
-        ticks: {
-          callback: function (value, index) {
-            return `P${data[index]?.processId || ""}`; // Label Y-axis with process names
-          },
-        },
+        display: false, // Hide Y-axis labels
       },
     },
     plugins: {
-      legend: { display: false }, // No need for a legend in a timeline
+      legend: {
+        display: true,
+      },
       tooltip: {
         callbacks: {
           label: function (tooltipItem) {
             const dataset = tooltipItem.dataset;
             const process = dataset.data[tooltipItem.dataIndex];
             const totalTime = process.x[1] - process.x[0]; // Total execution time
-            return `Start: ${process.x[0]}, End: ${process.x[1]}, Duration: ${totalTime}`;
+            return `Total Time: ${totalTime}`;
           },
         },
       },
     },
   };
 
-  return (
-    <div className="w-full h-96">
-      <Bar data={chartData} options={options} />
-    </div>
-  );
+  return <Bar data={chartData} options={options} />;
 }
-
 
 export default function Home() {
   const [numProcesses, setNumProcesses] = useState(5);
@@ -276,26 +246,17 @@ export default function Home() {
   const [results, setResults] = useState([]);
   const [timelineData, setTimelineData] = useState([]);
   const [selectedAlgorithm, setSelectedAlgorithm] = useState("FIFO");
-  const [processes, setProcesses] = useState([]);
-  const [allAlgorithmResults, setAllAlgorithmResults] = useState({}); // Stores results for all algorithms
+  const [processes, setProcesses] = useState([]); // Store generated processes
 
   const handleGenerateProcesses = () => {
     const newProcesses = generateRandomProcesses(numProcesses);
     setProcesses(newProcesses);
-    setResults([]);
-    setTimelineData([]);
-    setAllAlgorithmResults({}); // Clear previous results
   };
 
   const handleRunAlgorithm = () => {
-    if (processes.length === 0) {
-      console.log("No processes available!");
-      return;
-    }
-  
-    console.log("Running algorithm:", selectedAlgorithm);
+    if (processes.length === 0) return; // Ensure processes exist
+
     let result, timeline;
-  
     switch (selectedAlgorithm) {
       case "FIFO":
         ({ result, timeline } = fifo(processes));
@@ -313,30 +274,52 @@ export default function Home() {
         ({ result, timeline } = mlfq(processes));
         break;
       default:
-        console.log("Invalid algorithm selected!");
         result = [];
         timeline = [];
     }
-  
-    console.log("Result:", result);
-    console.log("Timeline:", timeline);
-  
+
     setResults(result);
     setTimelineData(timeline);
   };
 
-  const handleRunAllAlgorithms = () => {
-    if (processes.length === 0) return;
-
-    const allResults = {
-      FIFO: fifo(processes),
-      SJF: sjf(processes),
-      RR: rr(processes, timeQuantum),
-      STCF: stcf(processes),
-      MLFQ: mlfq(processes),
-    };
-
-    setAllAlgorithmResults(allResults);
+  // ✅ Generate PDF Report
+  const generatePDF = () => {
+    const doc = new jsPDF();
+  
+    // Title
+    doc.setFontSize(16);
+    doc.text("CPU Scheduling Algorithm Results", 14, 15);
+    doc.setFontSize(12);
+    doc.text(`Algorithm Used: ${selectedAlgorithm}`, 14, 25);
+  
+    // Check if results exist
+    if (results.length === 0) {
+      doc.text("No data available", 14, 35);
+      doc.save("scheduling_results.pdf");
+      return;
+    }
+  
+    // Process Table (Ensure `processes` is not undefined)
+    if (processes && processes.length > 0) {
+      autoTable(doc, {
+        startY: 35,
+        head: [["Process ID", "Burst Time"]],
+        body: processes.map((p) => [p.id, p.burstTime]),
+      });
+    }
+  
+    // Get last table Y position safely
+    const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 45;
+  
+    // Completion Time Table
+    autoTable(doc, {
+      startY: finalY,
+      head: [["Process ID", "Completion Time"]],
+      body: results.map((r) => [r.processId, r.completionTime]),
+    });
+  
+    // Save the PDF
+    doc.save("scheduling_results.pdf");
   };
 
   return (
@@ -376,6 +359,7 @@ export default function Home() {
           </select>
         </div>
 
+        {/* Generate Processes Button */}
         <button
           onClick={handleGenerateProcesses}
           className="bg-gray-700 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-gray-600 transition-all"
@@ -383,6 +367,7 @@ export default function Home() {
           Generate Processes
         </button>
 
+        {/* Process Table */}
         {processes.length > 0 && (
           <table className="border-collapse border border-gray-600 mt-6 w-full max-w-md">
             <thead>
@@ -392,23 +377,24 @@ export default function Home() {
               </tr>
             </thead>
             <tbody>
-              {processes
-                .slice() // Create a copy to avoid mutating state
-                .sort((a, b) => a.id - b.id) // Sort by Process ID
-                .map((process, index) => (
-                  <tr key={process.id} className={index % 2 === 0 ? "bg-gray-800" : "bg-gray-700"}>
-                    <td className="border border-gray-600 px-4 py-2 text-center">
-                      {process.id}
-                    </td>
-                    <td className="border border-gray-600 px-4 py-2 text-center">
-                      {process.burstTime}
-                    </td>
-                  </tr>
-                ))}
+              {processes.map((process, index) => (
+                <tr
+                  key={process.id}
+                  className={index % 2 === 0 ? "bg-gray-800" : "bg-gray-700"}
+                >
+                  <td className="border border-gray-600 px-4 py-2 text-center">
+                    {process.id}
+                  </td>
+                  <td className="border border-gray-600 px-4 py-2 text-center">
+                    {process.burstTime}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
 
+        {/* Run Algorithm Button */}
         <button
           onClick={handleRunAlgorithm}
           className="bg-blue-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-blue-400 transition-all"
@@ -416,43 +402,21 @@ export default function Home() {
           Run Algorithm
         </button>
 
-        {/* ✅ NEW "Run All Algorithms" Button */}
-        <button
-          onClick={handleRunAllAlgorithms}
-          className="bg-purple-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-purple-400 transition-all"
-        >
-          Run All Algorithms
-        </button>
-
-        {/* Display All Algorithm Results */}
-        {Object.keys(allAlgorithmResults).length > 0 && (
-          <div className="w-full max-w-6xl mt-8 flex flex-col gap-8">
-            
-            {/* First Row - Bar Charts */}
-            <div className="grid grid-cols-2 gap-8">
-              {Object.entries(allAlgorithmResults).map(([algorithm, { result }]) => (
-                <div key={algorithm} className="w-full">
-                  <h2 className="text-xl font-bold mb-2 text-center">{algorithm} - Completion Time</h2>
-                  <BarChart data={result} />
-                </div>
-              ))}
-            </div>
-
-            {/* Second Row - Timeline Charts */}
-            <div className="grid grid-cols-2 gap-8">
-              {Object.entries(allAlgorithmResults).map(([algorithm, { timeline }]) => (
-                <div key={algorithm} className="w-full">
-                  <h2 className="text-xl font-bold mb-2 text-center">{algorithm} - Execution Timeline</h2>
-                  <TimelineChart data={timeline} />
-                </div>
-              ))}
-            </div>
-
-          </div>
+        {/* Results */}
+        {results.length > 0 && (
+          <>
+            <BarChart data={results} />
+            <TimelineChart data={timelineData} />
+            <button
+              onClick={generatePDF}
+              className="bg-green-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-green-400 transition-all"
+            >
+              Download PDF
+            </button>
+          </>
         )}
       </main>
     </div>
   );
 }
-
 
