@@ -1,8 +1,8 @@
 'use client'; // Add this line to indicate it's a client component
 
 import { useState } from "react";
-import Image from "next/image";
 import { jsPDF } from "jspdf";
+import { Bar } from "react-chartjs-2";
 
 // Dynamically import Chart.js and react-chartjs-2 (to avoid SSR issues)
 import dynamic from "next/dynamic";
@@ -31,88 +31,103 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 function fifo(processes) {
   let time = 0;
   const result = [];
+  const timeline = [];
   processes.forEach((process, index) => {
+    const startTime = time;
     time += process.burstTime;
     result.push({ processId: index + 1, completionTime: time });
+    timeline.push({ processId: index + 1, startTime, endTime: time });
   });
-  return result;
+  return { result, timeline };
 }
 
 // SJF: Shortest Job First
 function sjf(processes) {
   let time = 0;
   const result = [];
+  const timeline = [];
   processes.sort((a, b) => a.burstTime - b.burstTime);
   processes.forEach((process, index) => {
+    const startTime = time;
     time += process.burstTime;
     result.push({ processId: index + 1, completionTime: time });
+    timeline.push({ processId: index + 1, startTime, endTime: time });
   });
-  return result;
+  return { result, timeline };
 }
 
 // Round Robin
 function rr(processes, timeQuantum) {
   let time = 0;
   const result = [];
-  let queue = [...processes]; // A queue of processes
+  const timeline = [];
+  let queue = [...processes];
 
   while (queue.length > 0) {
-    let process = queue.shift(); // Get the next process
-    let execTime = Math.min(process.burstTime, timeQuantum); // Execute for a max of timeQuantum
-    time += execTime; // Update total time
-    process.burstTime -= execTime; // Reduce the burst time of the current process
+    let process = queue.shift();
+    const startTime = time;
+    const execTime = Math.min(process.burstTime, timeQuantum);
+    time += execTime;
+    process.burstTime -= execTime;
     if (process.burstTime > 0) {
-      queue.push(process); // If process is not finished, add it back to the queue
+      queue.push(process);
     }
     result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
+    timeline.push({ processId: process.id, startTime, endTime: time });
   }
-  return result;
+  return { result, timeline };
 }
 
 // STCF: Shortest Time-to-Completion First
 function stcf(processes) {
   let time = 0;
   const result = [];
+  const timeline = [];
   let remainingProcesses = [...processes];
   
   while (remainingProcesses.length > 0) {
-    remainingProcesses.sort((a, b) => a.burstTime - b.burstTime);  // Sort by remaining burst time
+    remainingProcesses.sort((a, b) => a.burstTime - b.burstTime);
     const process = remainingProcesses.shift();
+    const startTime = time;
     time += process.burstTime;
     result.push({ processId: process.id, completionTime: time });
+    timeline.push({ processId: process.id, startTime, endTime: time });
   }
-  return result;
+  return { result, timeline };
 }
 
 // MLFQ: Multi-Level Feedback Queue (simplified version)
 function mlfq(processes) {
   let time = 0;
   const result = [];
-  const queue1 = []; // Higher priority
-  const queue2 = []; // Lower priority
+  const timeline = [];
+  const queue1 = [];
+  const queue2 = [];
 
-  // Initially put all processes in queue1
   processes.forEach((process) => queue1.push(process));
 
-  // Process until all queues are empty
   while (queue1.length > 0 || queue2.length > 0) {
     if (queue1.length > 0) {
-      let process = queue1.shift(); // Process from queue1 (highest priority)
-      let execTime = Math.min(process.burstTime, 2); // Time quantum for level 1 is 2
+      let process = queue1.shift();
+      const startTime = time;
+      const execTime = Math.min(process.burstTime, 2);
       time += execTime;
-      process.burstTime -= execTime; // Reduce burst time
-      if (process.burstTime > 0) queue2.push(process); // Move to queue2 if not finished
+      process.burstTime -= execTime;
+      if (process.burstTime > 0) queue2.push(process);
       result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
+      timeline.push({ processId: process.id, startTime, endTime: time });
     } else if (queue2.length > 0) {
-      let process = queue2.shift(); // Process from queue2 (lower priority)
-      let execTime = Math.min(process.burstTime, 4); // Time quantum for level 2 is 4
+      let process = queue2.shift();
+      const startTime = time;
+      const execTime = Math.min(process.burstTime, 4);
       time += execTime;
-      process.burstTime -= execTime; // Reduce burst time
-      if (process.burstTime > 0) queue2.push(process); // If not finished, stay in queue2
+      process.burstTime -= execTime;
+      if (process.burstTime > 0) queue2.push(process);
       result.push({ processId: process.id, timeExecuted: execTime, totalTime: time });
+      timeline.push({ processId: process.id, startTime, endTime: time });
     }
   }
-  return result;
+  return { result, timeline };
 }
 
 // Generate Random Processes
@@ -121,7 +136,7 @@ function generateRandomProcesses(numProcesses) {
   for (let i = 0; i < numProcesses; i++) {
     processes.push({
       id: i + 1,
-      burstTime: Math.floor(Math.random() * 10) + 1, // Random burst time between 1 and 10
+      burstTime: Math.floor(Math.random() * 10) + 1,
     });
   }
   return processes;
@@ -145,36 +160,89 @@ function BarChart({ data }) {
   return <Chart type="bar" data={chartData} />;
 }
 
+function TimelineChart({ data }) {
+  const chartData = {
+    labels: ["Processes"], // Single row for all processes
+    datasets: data.map((process, index) => ({
+      label: `Process ${process.processId}`,
+      data: [{ x: [process.startTime, process.endTime], y: 0 }], // Single row timeline
+      backgroundColor: `hsl(${(index * 360) / data.length}, 70%, 50%)`,
+      borderColor: "black",
+      borderWidth: 1,
+      barThickness: 20,
+    })),
+  };
+
+  const options = {
+    responsive: true,
+    indexAxis: "y", // Horizontal bar chart
+    scales: {
+      x: {
+        type: "linear",
+        position: "bottom",
+        title: {
+          display: true,
+          text: "Time",
+        },
+      },
+      y: {
+        display: false, // Hide Y-axis labels
+      },
+    },
+    plugins: {
+      legend: {
+        display: true,
+      },
+      tooltip: {
+        callbacks: {
+          label: function (tooltipItem) {
+            const dataset = tooltipItem.dataset;
+            const process = dataset.data[tooltipItem.dataIndex];
+            const totalTime = process.x[1] - process.x[0]; // Total execution time
+            return `Total Time: ${totalTime}`;
+          },
+        },
+      },
+    },
+  };
+
+  return <Bar data={chartData} options={options} />;
+}
+
 export default function Home() {
   const [numProcesses, setNumProcesses] = useState(5);
   const [timeQuantum, setTimeQuantum] = useState(3);
   const [results, setResults] = useState([]);
+  const [timelineData, setTimelineData] = useState([]);
   const [selectedAlgorithm, setSelectedAlgorithm] = useState("FIFO");
 
   const handleRunAlgorithm = () => {
     const processes = generateRandomProcesses(numProcesses);
 
     let result;
+    let timeline;
     switch (selectedAlgorithm) {
       case "FIFO":
-        result = fifo(processes);
+        ({ result, timeline } = fifo(processes));
         break;
       case "SJF":
-        result = sjf(processes);
+        ({ result, timeline } = sjf(processes));
         break;
       case "RR":
-        result = rr(processes, timeQuantum);
+        ({ result, timeline } = rr(processes, timeQuantum));
         break;
       case "STCF":
-        result = stcf(processes);
+        ({ result, timeline } = stcf(processes));
         break;
       case "MLFQ":
-        result = mlfq(processes);
+        ({ result, timeline } = mlfq(processes));
         break;
       default:
         result = [];
+        timeline = [];
     }
     setResults(result);
+    setTimelineData(timeline);
   };
 
   const generatePDF = () => {
@@ -238,6 +306,7 @@ export default function Home() {
         {results.length > 0 && (
           <>
             <BarChart data={results} />
+            <TimelineChart data={timelineData} />
             <button
               onClick={generatePDF}
               className="bg-green-500 text-white rounded px-6 py-3 mt-4 hover:bg-green-700 transition-all"
