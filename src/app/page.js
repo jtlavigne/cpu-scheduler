@@ -97,51 +97,42 @@ function rr(processes, timeQuantum) {
   return { result, timeline, processes: processes.map(p => ({ id: p.id, burstTime: originalBurstTimes[p.id] })) };
 }
 
-function mlfq(processes) {
+function mlfq(processes, quantumTimes) {
   let time = 0;
   const result = [];
   const timeline = [];
-  const queue1 = [];
-  const queue2 = [];
-  
-  // Copy the processes and keep original burst times
-  let processCopy = processes.map(p => ({ ...p }));
-  let completionTimes = {}; // Store last completion times
-  let originalBurstTimes = Object.fromEntries(processes.map(p => [p.id, p.burstTime])); // Store original burst times
+  const queues = quantumTimes.map(() => []);
 
-  processCopy.forEach((process) => queue1.push(process));
+  processes.forEach(proc => queues[0].push({ ...proc, remainingTime: proc.burstTime, currentQueue: 0 }));
 
-  while (queue1.length > 0 || queue2.length > 0) {
-      if (queue1.length > 0) {
-          let process = queue1.shift();
-          const startTime = time;
-          const execTime = Math.min(process.burstTime, 2);
-          time += execTime;
-          process.burstTime -= execTime;
-          if (process.burstTime > 0) queue2.push(process);
-          timeline.push({ processId: process.id, startTime, endTime: time });
-          completionTimes[process.id] = time;
-      } else if (queue2.length > 0) {
-          let process = queue2.shift();
-          const startTime = time;
-          const execTime = Math.min(process.burstTime, 4);
-          time += execTime;
-          process.burstTime -= execTime;
-          if (process.burstTime > 0) queue2.push(process);
-          timeline.push({ processId: process.id, startTime, endTime: time });
-          completionTimes[process.id] = time;
+  while (queues.some(queue => queue.length > 0)) {
+    for (let i = 0; i < queues.length; i++) {
+      const queue = queues[i];
+      const quantum = quantumTimes[i];
+
+      if (queue.length === 0) continue;
+
+      const process = queue.shift();
+      const execTime = Math.min(process.remainingTime, quantum);
+      const startTime = time;
+      time += execTime;
+      process.remainingTime -= execTime;
+
+      timeline.push({ processId: process.id, startTime, endTime: time });
+
+      if (process.remainingTime > 0) {
+        process.currentQueue = Math.min(i + 1, queues.length - 1);
+        queues[process.currentQueue].push(process);
+      } else {
+        result.push({ processId: process.id, completionTime: time });
       }
+
+      break;
+    }
   }
 
-  // Convert completion times to array format for graphing
-  Object.entries(completionTimes).forEach(([processId, completionTime]) => {
-      result.push({ processId: parseInt(processId), completionTime });
-  });
-
-  // ✅ Restore original burst times before returning
-  return { result, timeline, processes: processes.map(p => ({ id: p.id, burstTime: originalBurstTimes[p.id] })) };
+  return { result, timeline };
 }
-
 
 // STCF: Shortest Time-to-Completion First
 function stcf(processes) {
@@ -284,16 +275,21 @@ export default function Home() {
   const [timelineData, setTimelineData] = useState([]);
   const [selectedAlgorithm, setSelectedAlgorithm] = useState("FIFO");
   const [processes, setProcesses] = useState([]);
-  const chartRef = useRef(null); // Reference for BarChart
-  const timelineChartRef = useRef(null); // Reference for TimelineChart
+  const [queueTimes, setQueueTimes] = useState([4, 8, 12]); // Default MLFQ quantum times
 
   const handleGenerateProcesses = () => {
     const newProcesses = generateRandomProcesses(numProcesses);
     setProcesses(newProcesses);
   };
 
+  const handleQueueTimeChange = (index, value) => {
+    const newQueueTimes = [...queueTimes];
+    newQueueTimes[index] = Number(value);
+    setQueueTimes(newQueueTimes);
+  };
+
   const handleRunAlgorithm = () => {
-    if (processes.length === 0) return; // Ensure processes exist
+    if (processes.length === 0) return;
 
     let result, timeline;
     switch (selectedAlgorithm) {
@@ -310,7 +306,7 @@ export default function Home() {
         ({ result, timeline } = stcf(processes));
         break;
       case "MLFQ":
-        ({ result, timeline } = mlfq(processes));
+        ({ result, timeline } = mlfq(processes, queueTimes));
         break;
       default:
         result = [];
@@ -353,18 +349,23 @@ export default function Home() {
     // ✅ Process Completion Times (Top Right)
     doc.setFontSize(14);
     doc.text("Process Completion Times", xRight, yTop);
+
+    // Aggregate timeline data by processId
+    const aggregatedCompletionTimes = processes.map((process) => {
+      const processEntries = timelineData.filter(entry => entry.processId === process.id);
+      const startTime = processEntries[0].startTime;
+      const completionTime = processEntries[processEntries.length - 1].endTime;
+      return [process.id, startTime, completionTime];
+    });
+
     autoTable(doc, {
-        startY: yTop + 5,
-        margin: { left: xRight, right: xRight + cellWidth },
-        head: [["Process ID", "Start Time", "Completion Time"]],
-        body: timelineData.map((entry) => [
-            entry.processId,
-            entry.startTime,
-            entry.endTime,
-        ]),
-        theme: "grid",
-        styles: { fontSize: 10 },
-        tableWidth: cellWidth - margin,
+      startY: yTop + 5,
+      margin: { left: xRight, right: xRight + cellWidth },
+      head: [["Process ID", "Start Time", "Completion Time"]],
+      body: aggregatedCompletionTimes,
+      theme: "grid",
+      styles: { fontSize: 10 },
+      tableWidth: cellWidth - margin,
     });
 
     // ✅ Capture & Scale Charts Dynamically
@@ -399,107 +400,124 @@ export default function Home() {
     doc.save("CPU_Scheduling_Report.pdf");
 };
 
-  return (
-    <div className="bg-gray-900 min-h-screen p-8 pb-20 text-white">
-      <header className="bg-blue-700 text-white w-full py-6 text-center font-bold text-3xl shadow-lg mb-8">
-        CPU Scheduling Simulator
-      </header>
+return (
+  <div className="bg-gray-900 min-h-screen p-8 pb-20 text-white">
+    <header className="bg-blue-700 text-white w-full py-6 text-center font-bold text-3xl shadow-lg mb-8">
+      CPU Scheduling Simulator
+    </header>
 
-      <main className="flex flex-col gap-6 items-center">
-        {/* Input Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <label className="text-lg text-gray-300">Number of Processes:</label>
-          <input
-            type="number"
-            value={numProcesses}
-            onChange={(e) => setNumProcesses(parseInt(e.target.value))}
-            className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
-          />
-          <label className="text-lg text-gray-300">Time Quantum (for RR):</label>
-          <input
-            type="number"
-            value={timeQuantum}
-            onChange={(e) => setTimeQuantum(parseInt(e.target.value))}
-            className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
-          />
-          <label className="text-lg text-gray-300">Select Algorithm:</label>
-          <select
-            value={selectedAlgorithm}
-            onChange={(e) => setSelectedAlgorithm(e.target.value)}
-            className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
-          >
-            <option value="FIFO">FIFO</option>
-            <option value="SJF">SJF</option>
-            <option value="RR">RR</option>
-            <option value="STCF">STCF</option>
-            <option value="MLFQ">MLFQ</option>
-          </select>
-        </div>
-
-        {/* Generate Processes Button */}
-        <button
-          onClick={handleGenerateProcesses}
-          className="bg-gray-700 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-gray-600 transition-all"
-        >
-          Generate Processes
-        </button>
-
-        {/* Process Table */}
-        {processes.length > 0 && (
-          <table className="border-collapse border border-gray-600 mt-6 w-full max-w-md">
-            <thead>
-              <tr className="bg-gray-700 text-white">
-                <th className="border border-gray-600 px-4 py-2">Process ID</th>
-                <th className="border border-gray-600 px-4 py-2">Burst Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {processes.map((process, index) => (
-                <tr
-                  key={process.id}
-                  className={index % 2 === 0 ? "bg-gray-800" : "bg-gray-700"}
-                >
-                  <td className="border border-gray-600 px-4 py-2 text-center">
-                    {process.id}
-                  </td>
-                  <td className="border border-gray-600 px-4 py-2 text-center">
-                    {process.burstTime}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        {/* Run Algorithm Button */}
-        <button
-          onClick={handleRunAlgorithm}
-          className="bg-blue-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-blue-400 transition-all"
-        >
-          Run Algorithm
-        </button>
-
-        {/* Results with charts */}
-        {results.length > 0 && (
+    <main className="flex flex-col gap-6 items-center">
+      {/* Input Controls */}
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <label className="text-lg text-gray-300">Number of Processes:</label>
+        <input
+          type="number"
+          value={numProcesses}
+          onChange={(e) => setNumProcesses(parseInt(e.target.value))}
+          className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
+        />
+        {selectedAlgorithm === "RR" && (
           <>
-            <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px" }}>
-                <div id="completionChart">
-                    <BarChart data={results} />
-                </div>
-                <div id="timelineChart">
-                    <TimelineChart data={timelineData} />
-                </div>
-            </div>
-            <button
-              onClick={generatePDF}
-              className="bg-green-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-green-400 transition-all"
-            >
-              Download PDF
-            </button>
+            <label className="text-lg text-gray-300">Time Quantum (RR):</label>
+            <input
+              type="number"
+              value={timeQuantum}
+              onChange={(e) => setTimeQuantum(parseInt(e.target.value))}
+              className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
+            />
           </>
         )}
-      </main>
-    </div>
-  );
+        <label className="text-lg text-gray-300">Select Algorithm:</label>
+        <select
+          value={selectedAlgorithm}
+          onChange={(e) => setSelectedAlgorithm(e.target.value)}
+          className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
+        >
+          <option value="FIFO">FIFO</option>
+          <option value="SJF">SJF</option>
+          <option value="RR">RR</option>
+          <option value="STCF">STCF</option>
+          <option value="MLFQ">MLFQ</option>
+        </select>
+      </div>
+
+      {selectedAlgorithm === "MLFQ" && (
+        <div className="flex flex-col sm:flex-row gap-4 items-center mt-4">
+          <label className="text-lg text-gray-300">MLFQ Queue Quantum Times:</label>
+          {queueTimes.map((qt, index) => (
+            <input
+              key={index}
+              type="number"
+              value={qt}
+              onChange={(e) => {
+                const updatedQueueTimes = [...queueTimes];
+                updatedQueueTimes[index] = parseInt(e.target.value) || 1;
+                setQueueTimes(updatedQueueTimes);
+              }}
+              className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
+              placeholder={`Queue ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Generate Processes Button */}
+      <button
+        onClick={handleGenerateProcesses}
+        className="bg-gray-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-gray-400 transition-all"
+      >
+        Generate Processes
+      </button>
+
+      {/* Process Table */}
+      {processes.length > 0 && (
+        <table className="border-collapse border border-gray-600 mt-6 w-full max-w-md">
+          <thead>
+            <tr className="bg-gray-700 text-white">
+              <th className="border border-gray-600 px-4 py-2">Process ID</th>
+              <th className="border border-gray-600 px-4 py-2">Burst Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {processes.map((process, index) => (
+              <tr key={process.id} className={index % 2 === 0 ? "bg-gray-800" : "bg-gray-700"}>
+                <td className="border border-gray-600 px-4 py-2 text-center">{process.id}</td>
+                <td className="border border-gray-600 px-4 py-2 text-center">{process.burstTime}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Run Algorithm Button */}
+      <button
+        onClick={handleRunAlgorithm}
+        className="bg-blue-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-blue-400 transition-all"
+      >
+        Run Algorithm
+      </button>
+
+      {/* Results with charts */}
+      {results.length > 0 && (
+        <>
+          <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div id="completionChart">
+              <BarChart data={results} />
+            </div>
+            <div id="timelineChart">
+              <TimelineChart data={timelineData} />
+            </div>
+          </div>
+          <button
+            onClick={generatePDF}
+            className="bg-green-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-green-400 transition-all"
+          >
+            Download PDF
+          </button>
+        </>
+      )}
+    </main>
+  </div>
+);
 }
 
