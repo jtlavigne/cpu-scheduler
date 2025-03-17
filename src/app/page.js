@@ -270,12 +270,13 @@ function TimelineChart({ data }) {
 
 export default function Home() {
   const [numProcesses, setNumProcesses] = useState(5);
-  const [timeQuantum, setTimeQuantum] = useState(3);
-  const [results, setResults] = useState([]);
-  const [timelineData, setTimelineData] = useState([]);
-  const [selectedAlgorithm, setSelectedAlgorithm] = useState("FIFO");
-  const [processes, setProcesses] = useState([]);
-  const [queueTimes, setQueueTimes] = useState([4, 8, 12]); // Default MLFQ quantum times
+const [timeQuantum, setTimeQuantum] = useState(3);
+const [results, setResults] = useState([]);
+const [timelineData, setTimelineData] = useState([]);
+const [selectedAlgorithm, setSelectedAlgorithm] = useState("FIFO");
+const [processes, setProcesses] = useState([]);
+const [queueTimes, setQueueTimes] = useState([2, 4, 6]);
+const [allAlgorithmResults, setAllAlgorithmResults] = useState(null);
 
   const handleGenerateProcesses = () => {
     const newProcesses = generateRandomProcesses(numProcesses);
@@ -317,88 +318,141 @@ export default function Home() {
     setTimelineData(timeline);
   };
 
+  const handleRunAllAlgorithms = () => {
+    if (processes.length === 0) return;
+  
+    // Prompt for RR time quantum
+    const rrQuantum = parseInt(prompt("Enter RR Time Quantum:", timeQuantum)) || timeQuantum;
+    setTimeQuantum(rrQuantum);
+  
+    // Prompt for MLFQ queue quantum times
+    const queueInputs = queueTimes.map((qt, idx) => {
+      const userInput = prompt(`Enter Quantum Time for MLFQ Queue ${idx + 1}:`, qt);
+      return parseInt(userInput) || qt;
+    });
+    setQueueTimes(queueInputs);
+  
+    const algorithms = ['FIFO', 'SJF', 'RR', 'STCF', 'MLFQ'];
+    const allResults = {};
+    const allTimelines = {};
+  
+    algorithms.forEach(algo => {
+      let result, timeline;
+      switch (algo) {
+        case 'FIFO':
+          ({ result, timeline } = fifo(processes));
+          break;
+        case 'SJF':
+          ({ result, timeline } = sjf(processes));
+          break;
+        case 'RR':
+          ({ result, timeline } = rr(processes, rrQuantum));
+          break;
+        case 'STCF':
+          ({ result, timeline } = stcf(processes));
+          break;
+        case 'MLFQ':
+          ({ result, timeline } = mlfq(processes, queueInputs));
+          break;
+        default:
+          result = [];
+          timeline = [];
+      }
+      allResults[algo] = result;
+      allTimelines[algo] = timeline;
+    });
+  
+    setAllAlgorithmResults({ results: allResults, timelines: allTimelines });
+  };
+
   const generatePDF = async () => {
-    const doc = new jsPDF("landscape", "mm", "a4"); // Landscape orientation for better spacing
-
-    doc.setFontSize(18);
-    doc.text("CPU Scheduling Simulation Results", 10, 10);
-
-    // ✅ Define page layout
-    const margin = 10;  // Space from edges
-    const cellWidth = (doc.internal.pageSize.width - margin * 3) / 2; // Width for each column
-    const cellHeight = (doc.internal.pageSize.height - margin * 3) / 2; // Height for each row
-
-    let xLeft = margin;
-    let xRight = margin + cellWidth + margin;
-    let yTop = 20;
-    let yBottom = yTop + cellHeight + margin;
-
-    // ✅ Process Burst Times (Top Left)
-    doc.setFontSize(14);
-    doc.text("Process Burst Times", xLeft, yTop);
-    autoTable(doc, {
+    const doc = new jsPDF("landscape", "mm", "a4"); 
+  
+    const margin = 10;
+    const cellWidth = (doc.internal.pageSize.width - margin * 3) / 2;
+    const cellHeight = (doc.internal.pageSize.height - margin * 3) / 2;
+  
+    const addChartToPDF = async (chartElement, chartTitle, x, y, maxWidth, maxHeight) => {
+      if (chartElement) {
+        const canvas = await html2canvas(chartElement, { scale: 2 });
+        const image = canvas.toDataURL("image/png");
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        let scaleFactor = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
+        let scaledWidth = imgWidth * scaleFactor;
+        let scaledHeight = imgHeight * scaleFactor;
+        doc.setFontSize(14);
+        doc.text(chartTitle, x, y);
+        doc.addImage(image, "PNG", x, y + 5, scaledWidth, scaledHeight);
+      }
+    };
+  
+    const generateSingleAlgorithmPage = async (algoName, processes, timelineData, results) => {
+      doc.setFontSize(18);
+      doc.text(`CPU Scheduling Simulation (${algoName})`, margin, 10);
+  
+      const xLeft = margin;
+      const xRight = margin + cellWidth + margin;
+      const yTop = 20;
+      const yBottom = yTop + cellHeight + margin;
+  
+      // Burst Times
+      doc.setFontSize(14);
+      doc.text("Process Burst Times", xLeft, yTop);
+      autoTable(doc, {
         startY: yTop + 5,
-        margin: { left: xLeft, right: xLeft + cellWidth },
+        margin: { left: xLeft },
         head: [["Process ID", "Burst Time"]],
         body: processes.map((process) => [process.id, process.burstTime]),
         theme: "grid",
         styles: { fontSize: 10 },
         tableWidth: cellWidth - margin,
-    });
-
-    // ✅ Process Completion Times (Top Right)
-    doc.setFontSize(14);
-    doc.text("Process Completion Times", xRight, yTop);
-
-    // Aggregate timeline data by processId
-    const aggregatedCompletionTimes = processes.map((process) => {
-      const processEntries = timelineData.filter(entry => entry.processId === process.id);
-      const startTime = processEntries[0].startTime;
-      const completionTime = processEntries[processEntries.length - 1].endTime;
-      return [process.id, startTime, completionTime];
-    });
-
-    autoTable(doc, {
-      startY: yTop + 5,
-      margin: { left: xRight, right: xRight + cellWidth },
-      head: [["Process ID", "Start Time", "Completion Time"]],
-      body: aggregatedCompletionTimes,
-      theme: "grid",
-      styles: { fontSize: 10 },
-      tableWidth: cellWidth - margin,
-    });
-
-    // ✅ Capture & Scale Charts Dynamically
-    const addChartToPDF = async (chartElementId, chartTitle, x, y, maxWidth, maxHeight) => {
-        const chartElement = document.getElementById(chartElementId);
-        if (chartElement) {
-            const canvas = await html2canvas(chartElement, { scale: 2 });
-            const image = canvas.toDataURL("image/png");
-
-            // Get original canvas dimensions
-            const imgWidth = canvas.width;
-            const imgHeight = canvas.height;
-
-            // Scale chart to fit within the max width/height while keeping aspect ratio
-            let scaleFactor = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
-            let scaledWidth = imgWidth * scaleFactor;
-            let scaledHeight = imgHeight * scaleFactor;
-
-            doc.setFontSize(14);
-            doc.text(chartTitle, x, y);
-            doc.addImage(image, "PNG", x, y + 5, scaledWidth, scaledHeight);
-        }
+      });
+  
+      // Completion Times (aggregated)
+      doc.setFontSize(14);
+      doc.text("Process Completion Times", xRight, yTop);
+      const aggregatedCompletionTimes = processes.map((process) => {
+        const entries = timelineData.filter(entry => entry.processId === process.id);
+        return [process.id, entries[0].startTime, entries[entries.length - 1].endTime];
+      });
+      autoTable(doc, {
+        startY: yTop + 5,
+        margin: { left: xRight },
+        head: [["Process ID", "Start Time", "Completion Time"]],
+        body: aggregatedCompletionTimes,
+        theme: "grid",
+        styles: { fontSize: 10 },
+        tableWidth: cellWidth - margin,
+      });
+  
+      // Completion Time Chart (Bottom Left)
+      const completionChartElement = document.getElementById(`completionChart-${algoName}`);
+      await addChartToPDF(completionChartElement, "Completion Time Chart", xLeft, yBottom, cellWidth - 5, cellHeight - 5);
+  
+      // Timeline Chart (Bottom Right)
+      const timelineChartElement = document.getElementById(`timelineChart-${algoName}`);
+      await addChartToPDF(timelineChartElement, "Execution Timeline Chart", xRight, yBottom, cellWidth - 5, cellHeight - 5);
     };
-
-    // ✅ Completion Time Chart (Bottom Left)
-    await addChartToPDF("completionChart", "Completion Time Chart", xLeft, yBottom, cellWidth - 5, cellHeight - 5);
-
-    // ✅ Execution Timeline Chart (Bottom Right)
-    await addChartToPDF("timelineChart", "Execution Timeline Chart", xRight, yBottom, cellWidth - 5, cellHeight - 5);
-
-    // ✅ Save the PDF
+  
+    if (allAlgorithmResults) {
+      const algorithmNames = Object.keys(allAlgorithmResults.results);
+      for (let i = 0; i < algorithmNames.length; i++) {
+        const algo = algorithmNames[i];
+        if (i > 0) doc.addPage();
+        await generateSingleAlgorithmPage(
+          algo,
+          processes,
+          allAlgorithmResults.timelines[algo],
+          allAlgorithmResults.results[algo]
+        );
+      }
+    } else {
+      await generateSingleAlgorithmPage(selectedAlgorithm, processes, timelineData, results);
+    }
+  
     doc.save("CPU_Scheduling_Report.pdf");
-};
+  };
 
 return (
   <div className="bg-gray-900 min-h-screen p-8 pb-20 text-white">
@@ -407,6 +461,7 @@ return (
     </header>
 
     <main className="flex flex-col gap-6 items-center">
+
       {/* Input Controls */}
       <div className="flex flex-col sm:flex-row gap-4 items-center">
         <label className="text-lg text-gray-300">Number of Processes:</label>
@@ -416,17 +471,7 @@ return (
           onChange={(e) => setNumProcesses(parseInt(e.target.value))}
           className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
         />
-        {selectedAlgorithm === "RR" && (
-          <>
-            <label className="text-lg text-gray-300">Time Quantum (RR):</label>
-            <input
-              type="number"
-              value={timeQuantum}
-              onChange={(e) => setTimeQuantum(parseInt(e.target.value))}
-              className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
-            />
-          </>
-        )}
+
         <label className="text-lg text-gray-300">Select Algorithm:</label>
         <select
           value={selectedAlgorithm}
@@ -439,8 +484,22 @@ return (
           <option value="STCF">STCF</option>
           <option value="MLFQ">MLFQ</option>
         </select>
+
+        {/* RR Quantum Input Conditional */}
+        {selectedAlgorithm === "RR" && (
+          <>
+            <label className="text-lg text-gray-300">Time Quantum (RR):</label>
+            <input
+              type="number"
+              value={timeQuantum}
+              onChange={(e) => setTimeQuantum(parseInt(e.target.value))}
+              className="border border-gray-500 bg-gray-800 text-white rounded px-3 py-2 shadow-md"
+            />
+          </>
+        )}
       </div>
 
+      {/* MLFQ Quantum Inputs Conditional */}
       {selectedAlgorithm === "MLFQ" && (
         <div className="flex flex-col sm:flex-row gap-4 items-center mt-4">
           <label className="text-lg text-gray-300">MLFQ Queue Quantum Times:</label>
@@ -464,7 +523,7 @@ return (
       {/* Generate Processes Button */}
       <button
         onClick={handleGenerateProcesses}
-        className="bg-gray-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-gray-400 transition-all"
+        className="bg-gray-700 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-gray-600 transition-all"
       >
         Generate Processes
       </button>
@@ -489,22 +548,31 @@ return (
         </table>
       )}
 
-      {/* Run Algorithm Button */}
-      <button
-        onClick={handleRunAlgorithm}
-        className="bg-blue-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-blue-400 transition-all"
-      >
-        Run Algorithm
-      </button>
+      {/* Algorithm Run Buttons */}
+      <div className="flex gap-4">
+        <button
+          onClick={handleRunAlgorithm}
+          className="bg-blue-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-blue-400 transition-all"
+        >
+          Run Algorithm
+        </button>
 
-      {/* Results with charts */}
-      {results.length > 0 && (
+        <button
+          onClick={handleRunAllAlgorithms}
+          className="bg-purple-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-purple-400 transition-all"
+        >
+          Run All Algorithms
+        </button>
+      </div>
+
+      {/* Single Algorithm Results */}
+      {results.length > 0 && !allAlgorithmResults && (
         <>
           <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px" }}>
-            <div id="completionChart">
+            <div id={`completionChart-${selectedAlgorithm}`}>
               <BarChart data={results} />
             </div>
-            <div id="timelineChart">
+            <div id={`timelineChart-${selectedAlgorithm}`}>
               <TimelineChart data={timelineData} />
             </div>
           </div>
@@ -515,6 +583,32 @@ return (
             Download PDF
           </button>
         </>
+      )}
+
+      {/* All Algorithms Side-by-Side Results */}
+      {allAlgorithmResults && (
+        <div className="mt-10">
+          <h2 className="text-2xl font-bold text-center mb-4">Comparison of All Algorithms</h2>
+          <div className="flex flex-wrap justify-center gap-8">
+            {Object.keys(allAlgorithmResults.results).map((algoName) => (
+              <div key={algoName} className="bg-gray-800 p-4 rounded shadow-md">
+                <h3 className="text-xl font-semibold text-center mb-2">{algoName}</h3>
+                <div id={`completionChart-${algoName}`}>
+                  <BarChart data={allAlgorithmResults.results[algoName]} />
+                </div>
+                <div id={`timelineChart-${algoName}`}>
+                  <TimelineChart data={allAlgorithmResults.timelines[algoName]} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={generatePDF}
+            className="bg-green-500 text-white font-semibold rounded px-6 py-3 mt-8 hover:bg-green-400 transition-all block mx-auto"
+          >
+            Download PDF
+          </button>
+        </div>
       )}
     </main>
   </div>
