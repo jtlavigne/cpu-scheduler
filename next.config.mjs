@@ -1,9 +1,6 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {};
-
-export default nextConfig;
-
-module.exports = {
-    output: 'export',
-    images: { unoptimized: true },
-  };
+export default {
+  output: 'export',
+  images: { unoptimized: true },
+  basePath: '/cpu-scheduler',
+  assetPrefix: '/cpu-scheduler/',
+};
