@@ -5,8 +5,6 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Bar } from "react-chartjs-2"; // Assuming you're using Bar chart here
 import html2canvas from "html2canvas";
-
-// Dynamically import Chart.js and react-chartjs-2 (to avoid SSR issues)
 import dynamic from "next/dynamic";
 
 // Dynamically import the Chart component on the client-side
@@ -196,7 +194,12 @@ function TimelineChart({ data }) {
 
   const chartWidth = window.innerWidth * 0.45; // 45% screen width
   const baseHeight = 200; // Minimum height
-  const dynamicHeight = Math.max(baseHeight, data.length * 25); // Scaled dynamically per timeline entry
+
+  // Calculate unique processes clearly:
+  const uniqueProcesses = [...new Set(data.map((p) => p.processId))].length;
+
+  // Dynamically scale height by number of unique processes:
+  const dynamicHeight = Math.max(baseHeight, uniqueProcesses * 40);
   const chartHeight = dynamicHeight;
 
   const processColors = {};
