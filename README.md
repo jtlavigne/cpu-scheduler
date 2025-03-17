@@ -1,102 +1,113 @@
-CPU Scheduling Simulator 📊
-An interactive web application built with Next.js and React that simulates popular CPU scheduling algorithms, visualizes their execution timelines, and allows you to compare performance dynamically.
+# CPU Scheduling Simulator 📊
 
-🚀 Features
-Algorithms Supported:
+An interactive web application built with **Next.js** and **React** that simulates popular CPU scheduling algorithms, visualizes their execution timelines, and allows you to dynamically compare performance.
 
-First In First Out (FIFO)
-Shortest Job First (SJF)
-Round Robin (RR)
-Shortest Time-to-Completion First (STCF)
-Multi-Level Feedback Queue (MLFQ)
-Interactive UI:
+---
 
-Easily generate random processes.
-Customize the number of processes.
-Configure algorithm-specific parameters (e.g., RR quantum, MLFQ queue times).
-Visualization:
+## 🚀 Features
 
-Dynamic bar charts (Completion Times).
-Gantt-style timeline charts showing process execution clearly.
-Charts scale automatically based on the number of processes.
-Comparison & Reports:
+- **Algorithms Supported:**
+  - ✅ **First In First Out (FIFO)**
+  - ✅ **Shortest Job First (SJF)**
+  - ✅ **Round Robin (RR)**
+  - ✅ **Shortest Time-to-Completion First (STCF)**
+  - ✅ **Multi-Level Feedback Queue (MLFQ)**
 
-Run all algorithms simultaneously for side-by-side visual comparison.
-Export simulation results and visualizations directly to PDF.
-📸 Screenshots
-(Include your own screenshots here!)
+- **Interactive UI:**
+  - Generate random processes quickly.
+  - Easily customize the number of processes.
+  - Configure algorithm-specific parameters (RR quantum, MLFQ queue times).
 
-🛠 Built With
-Next.js (App Router)
-React
-Chart.js (with react-chartjs-2)
-Tailwind CSS (for styling)
-jsPDF & jspdf-autotable (for PDF reports)
-html2canvas (to capture charts for PDF export)
-🚩 Getting Started
-Prerequisites
-Node.js (v18+ recommended)
-npm or yarn installed
-Installation
-bash
-Copy code
+- **Visualization:**
+  - Dynamic bar charts for Completion Times.
+  - Gantt-style timeline charts illustrating the execution order of processes.
+  - Automatically scales chart sizes based on data.
+
+- **Comparison & Reports:**
+  - Run all algorithms simultaneously for side-by-side visual comparisons.
+  - Export simulation results and visualizations directly to PDF.
+
+---
+
+## 📸 Screenshots
+
+*(Add your screenshots here!)*
+
+---
+
+## 🛠 Built With
+
+- **[Next.js](https://nextjs.org)** (App Router)
+- **React**
+- **[Chart.js](https://www.chartjs.org)** & **[react-chartjs-2](https://react-chartjs-2.js.org)** (for visualizations)
+- **[Tailwind CSS](https://tailwindcss.com)** (CSS styling)
+- **[jsPDF](https://github.com/parallax/jsPDF)** & **[jspdf-autotable](https://github.com/simonbengtsson/jsPDF-AutoTable)** (PDF generation)
+- **[html2canvas](https://html2canvas.hertzen.com/)** (capturing charts for PDFs)
+
+---
+
+## 🚩 Getting Started
+
+### ✅ **Prerequisites**
+
+- Node.js (18+ recommended)
+- npm or yarn
+
+### ✅ **Installation**
+
+```bash
 git clone https://github.com/<your-username>/cpu-scheduler.git
 cd cpu-scheduler
 npm install
-Run locally (Development Mode)
-bash
-Copy code
+```
+
+##🛠️ Running the Simulator Locally
+ - Start the development server clearly:
+```bash
 npm run dev
-Open your browser at http://localhost:3000.
+```
+ - Open your browser at:
+```arduino
+http://localhost:3000
+```
+##🌐 Deploying to GitHub Pages
+ - To deploy your simulator as a static site on GitHub Pages, clearly follow these steps:
 
-Build and Deploy to GitHub Pages
-To build and deploy:
-
-Update your next.config.mjs (replace with your repo-name):
-javascript
-Copy code
+    1.Update your configuration (next.config.mjs) clearly:
+```js
 export default {
   output: 'export',
   images: { unoptimized: true },
-  basePath: '/cpu-scheduler', // your repo name
+  basePath: '/cpu-scheduler', // Replace with your GitHub repository name exactly
   assetPrefix: '/cpu-scheduler/',
 };
-Deploy to GitHub Pages (Windows-friendly):
-bash
-Copy code
+```
+
+##📌 Corrected Deployment Script (Windows-friendly)
+ - Make sure your package.json scripts look exactly like this:
+```json
+"scripts": {
+  "dev": "next dev",
+  "build": "next build",
+  "deploy": "next build && echo.> out\\.nojekyll && gh-pages -d out -b gh-pages"
+}
+```
+
+##🚀 Deploy Clearly (exact steps)
+ - Run the deployment clearly with:
+```bash
 npm run deploy
-Your app will be live at:
+```
+ - This builds your app and publishes it to the gh-pages branch.
 
-arduino
-Copy code
+##Your deployed site URL will be clearly at:
+```arduino
 https://<your-username>.github.io/cpu-scheduler/
-Ensure GitHub Pages is set to deploy from the gh-pages branch root (/).
+(Replace <your-username> with your actual GitHub username.)
+```
 
-⚙️ Customization & Usage
-Select an algorithm from the dropdown.
-Generate random processes or customize manually.
-Click Run Algorithm to visualize results for the selected algorithm.
-Click Run All Algorithms for a side-by-side comparison (prompts for RR & MLFQ settings will appear).
-Click Download PDF to export the simulation results clearly.
-🧑‍💻 Project Structure
-ruby
-Copy code
-cpu-scheduler
-├── app                # Next.js page components
-├── components         # BarChart and TimelineChart React components
-├── public             # Static assets (if any)
-├── package.json       # Dependencies & scripts
-├── next.config.mjs    # Next.js configuration
-├── tailwind.config.js # Tailwind CSS configuration
-└── README.md          # You're here!
-📦 Dependencies
-Key packages clearly explained:
+##✅ GitHub Pages Settings
+ - Make sure your GitHub repository's settings clearly point to:
 
-Package	Purpose
-Next.js	Framework for server-side and static apps
-Chart.js	Data visualization with charts
-jsPDF	Export simulation results and charts to PDF
-html2canvas	Capture DOM elements as canvas images for PDFs
-Tailwind CSS	Rapid styling and responsive design
-📑 License
-This project is licensed under the MIT License. Feel free to modify, distribute, and use it freely.
+   - Branch: gh-pages
+   - Directory: / (root)
