@@ -194,77 +194,78 @@ function BarChart({ data }) {
 function TimelineChart({ data }) {
   const chartRef = useRef();
 
-  // Get the chart width dynamically
-  const chartWidth = window.innerWidth * 0.45; // 45% of the screen width
-  const chartHeight = chartWidth * 0.5625; // 16:9 Aspect Ratio
+  const chartWidth = window.innerWidth * 0.45; // 45% screen width
+  const baseHeight = 200; // Minimum height
+  const dynamicHeight = Math.max(baseHeight, data.length * 25); // Scaled dynamically per timeline entry
+  const chartHeight = dynamicHeight;
 
   const processColors = {};
   const seenProcesses = new Set();
 
   const getColor = (id) => {
-      if (!processColors[id]) {
-          processColors[id] = `hsl(${(id * 137) % 360}, 70%, 50%)`;
-      }
-      return processColors[id];
+    if (!processColors[id]) {
+      processColors[id] = `hsl(${(id * 137) % 360}, 70%, 50%)`;
+    }
+    return processColors[id];
   };
 
   const chartData = {
-      labels: ["Processes"],
-      datasets: data.map((process) => {
-          const label = seenProcesses.has(process.processId) ? "" : `Process ${process.processId}`;
-          seenProcesses.add(process.processId);
+    labels: ["Processes"],
+    datasets: data.map((process) => {
+      const label = seenProcesses.has(process.processId) ? "" : `Process ${process.processId}`;
+      seenProcesses.add(process.processId);
 
-          return {
-              label,
-              data: [{ x: [process.startTime, process.endTime], y: 0 }],
-              backgroundColor: getColor(process.processId),
-              borderColor: "black",
-              borderWidth: 1,
-              barThickness: 20,
-          };
-      }),
+      return {
+        label,
+        data: [{ x: [process.startTime, process.endTime], y: 0 }],
+        backgroundColor: getColor(process.processId),
+        borderColor: "black",
+        borderWidth: 1,
+        barThickness: 20,
+      };
+    }),
   };
 
   const options = {
-      responsive: true,
-      indexAxis: "y",
-      scales: {
-          x: {
-              type: "linear",
-              position: "bottom",
-              title: {
-                  display: true,
-                  text: "Time",
-              },
-          },
-          y: {
-              display: false,
-          },
+    responsive: true,
+    indexAxis: "y",
+    scales: {
+      x: {
+        type: "linear",
+        position: "bottom",
+        title: {
+          display: true,
+          text: "Time",
+        },
       },
-      plugins: {
-          legend: {
-              display: true,
-          },
-          tooltip: {
-              callbacks: {
-                  label: function (tooltipItem) {
-                      const { x } = tooltipItem.raw;
-                      const startTime = x[0];
-                      const endTime = x[1];
-                      const totalTime = endTime - startTime;
-                      const processId = tooltipItem.dataset.label.replace("Process ", "");
+      y: {
+        display: false,
+      },
+    },
+    plugins: {
+      legend: {
+        display: true,
+      },
+      tooltip: {
+        callbacks: {
+          label: function (tooltipItem) {
+            const { x } = tooltipItem.raw;
+            const startTime = x[0];
+            const endTime = x[1];
+            const totalTime = endTime - startTime;
+            const processId = tooltipItem.dataset.label.replace("Process ", "");
 
-                      return `Process ${processId}: Execution Time ${totalTime}`;
-                  },
-              },
+            return `Process ${processId}: Execution Time ${totalTime}`;
           },
+        },
       },
+    },
   };
 
   return (
-      <div style={{ width: `${chartWidth}px`, height: `${chartHeight}px`, margin: "auto", padding: "10px" }}>
-          <Bar ref={chartRef} data={chartData} options={options} />
-      </div>
+    <div style={{ width: `${chartWidth}px`, height: `${chartHeight}px`, margin: "auto", padding: "10px" }}>
+      <Bar ref={chartRef} data={chartData} options={options} />
+    </div>
   );
 }
 
