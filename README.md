@@ -44,7 +44,7 @@ An interactive web application built with **Next.js** and **React** that simulat
 
 ### ✅ **Prerequisites**
 
-- Node.js (18+ recommended)
+- Node.js
 - npm or yarn
 
 ### ✅ **Installation**
