@@ -29,12 +29,6 @@ An interactive web application built with **Next.js** and **React** that simulat
 
 ---
 
-## 📸 Screenshots
-
-*(Add your screenshots here!)*
-
----
-
 ## 🛠 Built With
 
 - **[Next.js](https://nextjs.org)** (App Router)
@@ -61,6 +55,8 @@ cd cpu-scheduler
 npm install
 ```
 
+---
+
 ##🛠️ Running the Simulator Locally
  - Start the development server clearly:
 ```bash
@@ -70,6 +66,9 @@ npm run dev
 ```arduino
 http://localhost:3000
 ```
+
+---
+
 ##🌐 Deploying to GitHub Pages
  - To deploy your simulator as a static site on GitHub Pages, clearly follow these steps:
 
@@ -83,6 +82,8 @@ export default {
 };
 ```
 
+---
+
 ##📌 Corrected Deployment Script (Windows-friendly)
  - Make sure your package.json scripts look exactly like this:
 ```json
@@ -92,6 +93,8 @@ export default {
   "deploy": "next build && echo.> out\\.nojekyll && gh-pages -d out -b gh-pages"
 }
 ```
+
+---
 
 ##🚀 Deploy Clearly (exact steps)
  - Run the deployment clearly with:
@@ -105,6 +108,8 @@ npm run deploy
 https://<your-username>.github.io/cpu-scheduler/
 (Replace <your-username> with your actual GitHub username.)
 ```
+
+---
 
 ##✅ GitHub Pages Settings
  - Make sure your GitHub repository's settings clearly point to:
