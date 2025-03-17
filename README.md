@@ -57,7 +57,7 @@ npm install
 
 ---
 
-##🛠️ Running the Simulator Locally
+## 🛠️ Running the Simulator Locally
  - Start the development server clearly:
 ```bash
 npm run dev
@@ -69,7 +69,7 @@ http://localhost:3000
 
 ---
 
-##🌐 Deploying to GitHub Pages
+## 🌐 Deploying to GitHub Pages
  - To deploy your simulator as a static site on GitHub Pages, clearly follow these steps:
 
     1.Update your configuration (next.config.mjs) clearly:
@@ -84,7 +84,7 @@ export default {
 
 ---
 
-##📌 Corrected Deployment Script (Windows-friendly)
+## 📌 Corrected Deployment Script (Windows-friendly)
  - Make sure your package.json scripts look exactly like this:
 ```json
 "scripts": {
@@ -96,14 +96,14 @@ export default {
 
 ---
 
-##🚀 Deploy Clearly (exact steps)
+## 🚀 Deploy Clearly (exact steps)
  - Run the deployment clearly with:
 ```bash
 npm run deploy
 ```
  - This builds your app and publishes it to the gh-pages branch.
 
-##Your deployed site URL will be clearly at:
+### Your deployed site URL will be clearly at:
 ```arduino
 https://<your-username>.github.io/cpu-scheduler/
 (Replace <your-username> with your actual GitHub username.)
@@ -111,7 +111,7 @@ https://<your-username>.github.io/cpu-scheduler/
 
 ---
 
-##✅ GitHub Pages Settings
+## ✅ GitHub Pages Settings
  - Make sure your GitHub repository's settings clearly point to:
 
    - Branch: gh-pages
