@@ -1,9 +1,10 @@
 'use client'; // Add this line to indicate it's a client component
 
-import { useState } from "react";
+import React, { useState, useRef } from "react"; // Importing useRef here
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Bar } from "react-chartjs-2";
+import { Bar } from "react-chartjs-2"; // Assuming you're using Bar chart here
+import html2canvas from "html2canvas";
 
 // Dynamically import Chart.js and react-chartjs-2 (to avoid SSR issues)
 import dynamic from "next/dynamic";
@@ -36,24 +37,29 @@ function fifo(processes) {
   processes.forEach((process, index) => {
     const startTime = time;
     time += process.burstTime;
-    result.push({ processId: index + 1, completionTime: time });
-    timeline.push({ processId: index + 1, startTime, endTime: time });
+    result.push({ processId: process.id, completionTime: time });
+    timeline.push({ processId: process.id, startTime, endTime: time });
   });
   return { result, timeline };
 }
 
-// SJF: Shortest Job First
 function sjf(processes) {
   let time = 0;
   const result = [];
   const timeline = [];
+
+  // Sort by burstTime but keep track of the original process ID
   processes.sort((a, b) => a.burstTime - b.burstTime);
-  processes.forEach((process, index) => {
+
+  processes.forEach((process) => {
     const startTime = time;
     time += process.burstTime;
-    result.push({ processId: index + 1, completionTime: time });
-    timeline.push({ processId: index + 1, startTime, endTime: time });
+
+    // Use the actual process ID from the object
+    result.push({ processId: process.id, completionTime: time });
+    timeline.push({ processId: process.id, startTime, endTime: time });
   });
+
   return { result, timeline };
 }
 
@@ -61,30 +67,34 @@ function rr(processes, timeQuantum) {
   let time = 0;
   const result = [];
   const timeline = [];
-  let queue = [...processes];
+  
+  // Copy the processes and keep original burst times
+  let queue = processes.map(p => ({ ...p }));
   let completionTimes = {}; // Store the last completion time for each process
+  let originalBurstTimes = Object.fromEntries(processes.map(p => [p.id, p.burstTime])); // Store original burst times
 
   while (queue.length > 0) {
-    let process = queue.shift();
-    const startTime = time;
-    const execTime = Math.min(process.burstTime, timeQuantum);
-    time += execTime;
-    process.burstTime -= execTime;
+      let process = queue.shift();
+      const startTime = time;
+      const execTime = Math.min(process.burstTime, timeQuantum);
+      time += execTime;
+      process.burstTime -= execTime;
 
-    if (process.burstTime > 0) {
-      queue.push(process);
-    }
+      if (process.burstTime > 0) {
+          queue.push(process);
+      }
 
-    timeline.push({ processId: process.id, startTime, endTime: time });
-    completionTimes[process.id] = time; // Always update to track last completion
+      timeline.push({ processId: process.id, startTime, endTime: time });
+      completionTimes[process.id] = time; // Always update to track last completion
   }
 
-  // Convert to array format for graphing
+  // Convert completion times to array format for graphing
   Object.entries(completionTimes).forEach(([processId, completionTime]) => {
-    result.push({ processId: parseInt(processId), completionTime });
+      result.push({ processId: parseInt(processId), completionTime });
   });
 
-  return { result, timeline };
+  // ✅ Restore original burst times before returning
+  return { result, timeline, processes: processes.map(p => ({ id: p.id, burstTime: originalBurstTimes[p.id] })) };
 }
 
 function mlfq(processes) {
@@ -93,38 +103,43 @@ function mlfq(processes) {
   const timeline = [];
   const queue1 = [];
   const queue2 = [];
+  
+  // Copy the processes and keep original burst times
+  let processCopy = processes.map(p => ({ ...p }));
   let completionTimes = {}; // Store last completion times
+  let originalBurstTimes = Object.fromEntries(processes.map(p => [p.id, p.burstTime])); // Store original burst times
 
-  processes.forEach((process) => queue1.push(process));
+  processCopy.forEach((process) => queue1.push(process));
 
   while (queue1.length > 0 || queue2.length > 0) {
-    if (queue1.length > 0) {
-      let process = queue1.shift();
-      const startTime = time;
-      const execTime = Math.min(process.burstTime, 2);
-      time += execTime;
-      process.burstTime -= execTime;
-      if (process.burstTime > 0) queue2.push(process);
-      timeline.push({ processId: process.id, startTime, endTime: time });
-      completionTimes[process.id] = time;
-    } else if (queue2.length > 0) {
-      let process = queue2.shift();
-      const startTime = time;
-      const execTime = Math.min(process.burstTime, 4);
-      time += execTime;
-      process.burstTime -= execTime;
-      if (process.burstTime > 0) queue2.push(process);
-      timeline.push({ processId: process.id, startTime, endTime: time });
-      completionTimes[process.id] = time;
-    }
+      if (queue1.length > 0) {
+          let process = queue1.shift();
+          const startTime = time;
+          const execTime = Math.min(process.burstTime, 2);
+          time += execTime;
+          process.burstTime -= execTime;
+          if (process.burstTime > 0) queue2.push(process);
+          timeline.push({ processId: process.id, startTime, endTime: time });
+          completionTimes[process.id] = time;
+      } else if (queue2.length > 0) {
+          let process = queue2.shift();
+          const startTime = time;
+          const execTime = Math.min(process.burstTime, 4);
+          time += execTime;
+          process.burstTime -= execTime;
+          if (process.burstTime > 0) queue2.push(process);
+          timeline.push({ processId: process.id, startTime, endTime: time });
+          completionTimes[process.id] = time;
+      }
   }
 
   // Convert completion times to array format for graphing
   Object.entries(completionTimes).forEach(([processId, completionTime]) => {
-    result.push({ processId: parseInt(processId), completionTime });
+      result.push({ processId: parseInt(processId), completionTime });
   });
 
-  return { result, timeline };
+  // ✅ Restore original burst times before returning
+  return { result, timeline, processes: processes.map(p => ({ id: p.id, burstTime: originalBurstTimes[p.id] })) };
 }
 
 
@@ -158,86 +173,108 @@ function generateRandomProcesses(numProcesses) {
   return processes;
 }
 
-// BarChart Component for displaying results using Chart.js
 function BarChart({ data }) {
+  const chartRef = useRef();
+
+  // Get the chart width dynamically
+  const chartWidth = window.innerWidth * 0.45; // 45% of the screen width
+  const chartHeight = chartWidth * 0.5625; // 16:9 Aspect Ratio
+
   const chartData = {
-    labels: data.map((d, i) => `Process ${i + 1}`),
-    datasets: [
-      {
-        label: "Completion Time",
-        data: data.map((d) => d.completionTime),
-        backgroundColor: "rgba(75, 192, 192, 0.2)",
-        borderColor: "rgba(75, 192, 192, 1)",
-        borderWidth: 1,
-      },
-    ],
+      labels: data.map((d) => `Process ${d.processId}`),
+      datasets: [
+          {
+              label: "Completion Time",
+              data: data.map((d) => d.completionTime),
+              backgroundColor: "rgba(75, 192, 192, 0.2)",
+              borderColor: "rgba(75, 192, 192, 1)",
+              borderWidth: 1,
+          },
+      ],
   };
 
-  return <Chart type="bar" data={chartData} />;
+  return (
+      <div style={{ width: `${chartWidth}px`, height: `${chartHeight}px`, margin: "auto", padding: "10px" }}>
+          <Bar ref={chartRef} data={chartData} />
+      </div>
+  );
 }
 
 function TimelineChart({ data }) {
+  const chartRef = useRef();
+
+  // Get the chart width dynamically
+  const chartWidth = window.innerWidth * 0.45; // 45% of the screen width
+  const chartHeight = chartWidth * 0.5625; // 16:9 Aspect Ratio
+
   const processColors = {};
-  const seenProcesses = new Set(); // Track which processes have been labeled
+  const seenProcesses = new Set();
 
   const getColor = (id) => {
-    if (!processColors[id]) {
-      processColors[id] = `hsl(${(id * 137) % 360}, 70%, 50%)`; // Ensures unique but consistent colors
-    }
-    return processColors[id];
+      if (!processColors[id]) {
+          processColors[id] = `hsl(${(id * 137) % 360}, 70%, 50%)`;
+      }
+      return processColors[id];
   };
 
   const chartData = {
-    labels: ["Processes"], // Single row for all processes
-    datasets: data.map((process) => {
-      const label = seenProcesses.has(process.processId) ? "" : `Process ${process.processId}`;
-      seenProcesses.add(process.processId); // Mark this process as labeled
+      labels: ["Processes"],
+      datasets: data.map((process) => {
+          const label = seenProcesses.has(process.processId) ? "" : `Process ${process.processId}`;
+          seenProcesses.add(process.processId);
 
-      return {
-        label, // Only the first occurrence gets a label
-        data: [{ x: [process.startTime, process.endTime], y: 0 }], // Single-row timeline
-        backgroundColor: getColor(process.processId),
-        borderColor: "black",
-        borderWidth: 1,
-        barThickness: 20,
-      };
-    }),
+          return {
+              label,
+              data: [{ x: [process.startTime, process.endTime], y: 0 }],
+              backgroundColor: getColor(process.processId),
+              borderColor: "black",
+              borderWidth: 1,
+              barThickness: 20,
+          };
+      }),
   };
 
   const options = {
-    responsive: true,
-    indexAxis: "y", // Horizontal bar chart
-    scales: {
-      x: {
-        type: "linear",
-        position: "bottom",
-        title: {
-          display: true,
-          text: "Time",
-        },
-      },
-      y: {
-        display: false, // Hide Y-axis labels
-      },
-    },
-    plugins: {
-      legend: {
-        display: true,
-      },
-      tooltip: {
-        callbacks: {
-          label: function (tooltipItem) {
-            const dataset = tooltipItem.dataset;
-            const process = dataset.data[tooltipItem.dataIndex];
-            const totalTime = process.x[1] - process.x[0]; // Total execution time
-            return `Total Time: ${totalTime}`;
+      responsive: true,
+      indexAxis: "y",
+      scales: {
+          x: {
+              type: "linear",
+              position: "bottom",
+              title: {
+                  display: true,
+                  text: "Time",
+              },
           },
-        },
+          y: {
+              display: false,
+          },
       },
-    },
+      plugins: {
+          legend: {
+              display: true,
+          },
+          tooltip: {
+              callbacks: {
+                  label: function (tooltipItem) {
+                      const { x } = tooltipItem.raw;
+                      const startTime = x[0];
+                      const endTime = x[1];
+                      const totalTime = endTime - startTime;
+                      const processId = tooltipItem.dataset.label.replace("Process ", "");
+
+                      return `Process ${processId}: Execution Time ${totalTime}`;
+                  },
+              },
+          },
+      },
   };
 
-  return <Bar data={chartData} options={options} />;
+  return (
+      <div style={{ width: `${chartWidth}px`, height: `${chartHeight}px`, margin: "auto", padding: "10px" }}>
+          <Bar ref={chartRef} data={chartData} options={options} />
+      </div>
+  );
 }
 
 export default function Home() {
@@ -246,7 +283,9 @@ export default function Home() {
   const [results, setResults] = useState([]);
   const [timelineData, setTimelineData] = useState([]);
   const [selectedAlgorithm, setSelectedAlgorithm] = useState("FIFO");
-  const [processes, setProcesses] = useState([]); // Store generated processes
+  const [processes, setProcesses] = useState([]);
+  const chartRef = useRef(null); // Reference for BarChart
+  const timelineChartRef = useRef(null); // Reference for TimelineChart
 
   const handleGenerateProcesses = () => {
     const newProcesses = generateRandomProcesses(numProcesses);
@@ -282,45 +321,83 @@ export default function Home() {
     setTimelineData(timeline);
   };
 
-  // ✅ Generate PDF Report
-  const generatePDF = () => {
-    const doc = new jsPDF();
-  
-    // Title
-    doc.setFontSize(16);
-    doc.text("CPU Scheduling Algorithm Results", 14, 15);
-    doc.setFontSize(12);
-    doc.text(`Algorithm Used: ${selectedAlgorithm}`, 14, 25);
-  
-    // Check if results exist
-    if (results.length === 0) {
-      doc.text("No data available", 14, 35);
-      doc.save("scheduling_results.pdf");
-      return;
-    }
-  
-    // Process Table (Ensure `processes` is not undefined)
-    if (processes && processes.length > 0) {
-      autoTable(doc, {
-        startY: 35,
-        head: [["Process ID", "Burst Time"]],
-        body: processes.map((p) => [p.id, p.burstTime]),
-      });
-    }
-  
-    // Get last table Y position safely
-    const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 45;
-  
-    // Completion Time Table
+  const generatePDF = async () => {
+    const doc = new jsPDF("landscape", "mm", "a4"); // Landscape orientation for better spacing
+
+    doc.setFontSize(18);
+    doc.text("CPU Scheduling Simulation Results", 10, 10);
+
+    // ✅ Define page layout
+    const margin = 10;  // Space from edges
+    const cellWidth = (doc.internal.pageSize.width - margin * 3) / 2; // Width for each column
+    const cellHeight = (doc.internal.pageSize.height - margin * 3) / 2; // Height for each row
+
+    let xLeft = margin;
+    let xRight = margin + cellWidth + margin;
+    let yTop = 20;
+    let yBottom = yTop + cellHeight + margin;
+
+    // ✅ Process Burst Times (Top Left)
+    doc.setFontSize(14);
+    doc.text("Process Burst Times", xLeft, yTop);
     autoTable(doc, {
-      startY: finalY,
-      head: [["Process ID", "Completion Time"]],
-      body: results.map((r) => [r.processId, r.completionTime]),
+        startY: yTop + 5,
+        margin: { left: xLeft, right: xLeft + cellWidth },
+        head: [["Process ID", "Burst Time"]],
+        body: processes.map((process) => [process.id, process.burstTime]),
+        theme: "grid",
+        styles: { fontSize: 10 },
+        tableWidth: cellWidth - margin,
     });
-  
-    // Save the PDF
-    doc.save("scheduling_results.pdf");
-  };
+
+    // ✅ Process Completion Times (Top Right)
+    doc.setFontSize(14);
+    doc.text("Process Completion Times", xRight, yTop);
+    autoTable(doc, {
+        startY: yTop + 5,
+        margin: { left: xRight, right: xRight + cellWidth },
+        head: [["Process ID", "Start Time", "Completion Time"]],
+        body: timelineData.map((entry) => [
+            entry.processId,
+            entry.startTime,
+            entry.endTime,
+        ]),
+        theme: "grid",
+        styles: { fontSize: 10 },
+        tableWidth: cellWidth - margin,
+    });
+
+    // ✅ Capture & Scale Charts Dynamically
+    const addChartToPDF = async (chartElementId, chartTitle, x, y, maxWidth, maxHeight) => {
+        const chartElement = document.getElementById(chartElementId);
+        if (chartElement) {
+            const canvas = await html2canvas(chartElement, { scale: 2 });
+            const image = canvas.toDataURL("image/png");
+
+            // Get original canvas dimensions
+            const imgWidth = canvas.width;
+            const imgHeight = canvas.height;
+
+            // Scale chart to fit within the max width/height while keeping aspect ratio
+            let scaleFactor = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
+            let scaledWidth = imgWidth * scaleFactor;
+            let scaledHeight = imgHeight * scaleFactor;
+
+            doc.setFontSize(14);
+            doc.text(chartTitle, x, y);
+            doc.addImage(image, "PNG", x, y + 5, scaledWidth, scaledHeight);
+        }
+    };
+
+    // ✅ Completion Time Chart (Bottom Left)
+    await addChartToPDF("completionChart", "Completion Time Chart", xLeft, yBottom, cellWidth - 5, cellHeight - 5);
+
+    // ✅ Execution Timeline Chart (Bottom Right)
+    await addChartToPDF("timelineChart", "Execution Timeline Chart", xRight, yBottom, cellWidth - 5, cellHeight - 5);
+
+    // ✅ Save the PDF
+    doc.save("CPU_Scheduling_Report.pdf");
+};
 
   return (
     <div className="bg-gray-900 min-h-screen p-8 pb-20 text-white">
@@ -402,11 +479,17 @@ export default function Home() {
           Run Algorithm
         </button>
 
-        {/* Results */}
+        {/* Results with charts */}
         {results.length > 0 && (
           <>
-            <BarChart data={results} />
-            <TimelineChart data={timelineData} />
+            <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "10px" }}>
+                <div id="completionChart">
+                    <BarChart data={results} />
+                </div>
+                <div id="timelineChart">
+                    <TimelineChart data={timelineData} />
+                </div>
+            </div>
             <button
               onClick={generatePDF}
               className="bg-green-500 text-white font-semibold rounded px-6 py-3 mt-4 hover:bg-green-400 transition-all"
