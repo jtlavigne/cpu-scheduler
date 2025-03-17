@@ -27,6 +27,9 @@ An interactive web application built with **Next.js** and **React** that simulat
   - Run all algorithms simultaneously for side-by-side visual comparisons.
   - Export simulation results and visualizations directly to PDF.
 
+- **Accessing the Site**
+  - Access it here: **[CPU Scheduler](https://jtlavigne.github.io/cpu-scheduler/)**
+
 ---
 
 ## 🛠 Built With
